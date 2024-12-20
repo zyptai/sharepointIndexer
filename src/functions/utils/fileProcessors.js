@@ -232,7 +232,7 @@ async function processSharePointFile(context, fileUrl) {
         // If no context is provided, create a minimal context for logging
         const loggingContext = context || { 
             log: (msg) => console.log(msg) 
-        };
+        }; 
 
         logMessage(loggingContext, "Starting file processing", { fileUrl });
         
