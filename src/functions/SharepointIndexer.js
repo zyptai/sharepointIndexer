@@ -3,7 +3,7 @@
 
 const { processSharePointFile } = require('./utils/fileProcessors');
 const { logMessage, logError } = require('./utils/loggingService');
-const { getAppConfigValue } = require('./utils/configService');
+const { getRequiredConfig } = require('./utils/configService');
 const { TextDecoder } = require('util');
 
 /**
@@ -45,7 +45,7 @@ async function httpHandler(request, context) {
         // Get file URL from query params, body, or default config
         const fileUrl = request.query.fileUrl || 
                        requestBody?.fileUrl || 
-                       await getAppConfigValue('DEFAULT_SHAREPOINT_FILE_PATH');
+                       await getRequiredConfig('DEFAULT_SHAREPOINT_FILE_PATH');
         
         if (!fileUrl) {
             throw new Error("No file URL provided and no default URL configured");
