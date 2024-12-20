@@ -150,5 +150,6 @@ async function getRequiredConfig() {
 }
 
 module.exports = {
-    getRequiredConfig
-};
+    getRequiredConfig,
+    getAppConfigValue
+}

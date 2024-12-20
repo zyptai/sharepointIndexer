@@ -1,5 +1,5 @@
 // Copyright (c) 2024 ZyptAI, tim.barrow@zyptai.com
-// Proprietary and confidential to ZyptAI Github Deployment
+// Proprietary and confidential to ZyptAI
 // File: utils/loggingService.js
 // Purpose: Centralized logging service that integrates with Application Insights
 //          and provides consistent logging across the application.
