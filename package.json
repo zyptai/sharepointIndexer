@@ -1,0 +1,32 @@
+{
+  "name": "sharepointindexer",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests yet...\""
+  },
+  "dependencies": {
+    "@azure/app-configuration": "^1.8.0",
+    "@azure/core-auth": "^1.6.0",
+    "@azure/functions": "^4.6.0",
+    "@azure/identity": "^4.5.0",
+    "@azure/keyvault-secrets": "^4.9.0",
+    "@azure/openai": "^1.0.0-beta.7",
+    "@azure/search-documents": "^12.1.0",
+    "@azure/storage-queue": "^12.25.0",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "applicationinsights": "^3.4.0",
+    "axios": "^1.7.9",
+    "csv-parser": "^3.0.0",
+    "exceljs": "^4.4.0",
+    "install": "^0.13.0",
+    "isomorphic-fetch": "^3.0.0",
+    "mammoth": "^1.8.0",
+    "npm": "^10.9.2",
+    "pdf-parse": "^1.1.1",
+    "unzipper": "^0.12.3",
+    "xml2js": "^0.6.2"
+  },
+  "main": "index.js"
+}
