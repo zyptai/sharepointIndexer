@@ -19,6 +19,7 @@ const { createSearchDocument, validateDocument } = require('../models/documentMo
 const { initializeGraphClient, getSiteInfo, getDriveInfo, getFileMetadata } = require('../services/graphService');
 const { initializeSearchClient } = require('../services/searchService');
 const { getRequiredConfig } = require('./configService');
+const { ClientSecretCredential } = require('@azure/identity');
 
 /**
  * Controls the maximum size of content chunks for processing

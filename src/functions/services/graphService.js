@@ -11,6 +11,9 @@ const axios = require('axios');
 const { getRequiredConfig } = require('../utils/configService');
 const { logMessage, logError } = require('../utils/loggingService');
 require('isomorphic-fetch'); // Required for MS Graph Client
+const { Client } = require('@microsoft/microsoft-graph-client');
+const { TokenCredentialAuthenticationProvider } = require("@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials");
+const { ClientSecretCredential } = require("@azure/identity");  // Add this line
 
 /**
  * Initializes a Microsoft Graph client with proper authentication
