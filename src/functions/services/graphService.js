@@ -1,5 +1,5 @@
 // Copyright (c) 2024 ZyptAI, tim.barrow@zyptai.com
-// Proprietary and confidential to ZyptAI
+// Proprietary and confidential to ZyptAI  
 // File: services/graphService.js
 // Purpose: Handles all Microsoft Graph API interactions for SharePoint access.
 //          Provides methods for site, drive, and file operations.
