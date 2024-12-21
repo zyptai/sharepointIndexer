@@ -1,74 +1,107 @@
 // Copyright (c) 2024 ZyptAI, tim.barrow@zyptai.com
 // Proprietary and confidential to ZyptAI
 // File: utils/configService.js
+// Purpose: Centralized configuration service that integrates with App Configuration
+//          and Key Vault to provide consistent configuration across the application.
 
 const { AppConfigurationClient } = require("@azure/app-configuration");
 const { SecretClient } = require("@azure/keyvault-secrets");
-const { DefaultAzureCredential } = require("@azure/identity");
+const { ManagedIdentityCredential, AzureCliCredential } = require("@azure/identity");
 
-let config = null;
-
-/**
- * Helper function to determine if a value is base64 encoded
- * @param {string} str The string to test
- * @returns {boolean}
- */
-function isBase64(str) {
-    if (typeof str !== 'string') return false;
-    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-    return base64Regex.test(str) && str.length % 4 === 0;
-}
+// Configuration cache
+let configCache = null;
 
 /**
- * Decrypts values that might be encrypted 
- * @param {string} value The value to potentially decrypt
- * @returns {string} The decrypted value
+ * Configuration service class to handle all configuration operations
  */
-function decryptIfNeeded(value) {
-    if (!value) return value;
-    
-    // If it has crypto_ prefix, remove it
-    if (value.startsWith('crypto_')) {
-        return value.substring(7); // Remove 'crypto_' prefix
-    }
-    
-    return value;
-}
-
-/**
- * Retrieves all configuration settings
- * @returns {Promise<Object>} All configuration settings
- */
-async function getRequiredConfig() {
-    if (config) {
-        console.log("Returning cached config:", config);
-        return config;
+class ConfigurationService {
+    constructor() {
+        this.initialized = false;
+        this.config = null;
     }
 
-    console.log("Starting configuration retrieval...");
-    
-    try {
-        // First get all App Config settings
-        console.log("App Config Connection String:", process.env.AZURE_APP_CONFIG_CONNECTION_STRING);
-        const appConfigClient = new AppConfigurationClient(process.env.AZURE_APP_CONFIG_CONNECTION_STRING);
-        const settings = {};
-
-        const settingsIterator = appConfigClient.listConfigurationSettings();
-        for await (const setting of settingsIterator) {
-            settings[setting.key] = setting.value;
-            console.log(`Retrieved setting ${setting.key}:`, setting.value);
+    /**
+     * Initialize the configuration service
+     * @returns {Promise<void>}
+     */
+    async initialize() {
+        if (this.initialized) {
+            return;
         }
 
-        // Get Key Vault secrets following the sample approach exactly
-        const keyVaultName = "zyptaidevkeyvault";
-        const keyVaultUri = `https://${keyVaultName}.vault.azure.net`;
-        console.log("Key Vault URI:", keyVaultUri);
-        
-        // Create credential and client exactly as shown in sample
-        const credential = new DefaultAzureCredential();
-        const secretClient = new SecretClient(keyVaultUri, credential);
+        try {
+            // Create initial AppConfigurationClient
+            const appConfigClient = new AppConfigurationClient(process.env.AZURE_APP_CONFIG_CONNECTION_STRING);
+            const settings = await this._getAllSettings(appConfigClient);
 
-        // Get secrets with exact names from Key Vault
+            // Get managed identity details
+            const managedIdentityId = settings.SHAREPOINT_INDEXER_MANAGED_IDENTITY_ID;
+            const keyVaultName = settings.KEY_VAULT_NAME;
+
+            if (!managedIdentityId) {
+                throw new Error("Missing SHAREPOINT_INDEXER_MANAGED_IDENTITY_ID in App Configuration");
+            }
+
+            if (!keyVaultName) {
+                throw new Error("Missing KEY_VAULT_NAME in App Configuration");
+            }
+
+            // Create credential based on environment
+            const credential = this._createCredential(managedIdentityId);
+
+            // Initialize Key Vault client
+            const keyVaultUri = `https://${keyVaultName}.vault.azure.net`;
+            const secretClient = new SecretClient(keyVaultUri, credential);
+
+            // Get secrets
+            const secrets = await this._getSecrets(secretClient);
+
+            // Build configuration
+            this.config = this._buildConfig(settings, secrets);
+            this.initialized = true;
+        } catch (error) {
+            console.error("Failed to initialize configuration:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get all settings from App Configuration
+     * @param {AppConfigurationClient} client - App Configuration client
+     * @returns {Promise<Object>} Settings object
+     * @private
+     */
+    async _getAllSettings(client) {
+        const settings = {};
+        const settingsIterator = client.listConfigurationSettings();
+        
+        for await (const setting of settingsIterator) {
+            settings[setting.key] = setting.value;
+        }
+        
+        return settings;
+    }
+
+    /**
+     * Create appropriate credential based on environment
+     * @param {string} managedIdentityId - Managed identity client ID
+     * @returns {ManagedIdentityCredential|AzureCliCredential} Credential instance
+     * @private
+     */
+    _createCredential(managedIdentityId) {
+        const isDevelopment = process.env.NODE_ENV === 'development';
+        return isDevelopment ? 
+            new AzureCliCredential() : 
+            new ManagedIdentityCredential(managedIdentityId);
+    }
+
+    /**
+     * Get secrets from Key Vault
+     * @param {SecretClient} client - Key Vault secret client
+     * @returns {Promise<Object>} Secrets object
+     * @private
+     */
+    async _getSecrets(client) {
         const secretNames = [
             'SECRET-AZURE-OPENAI-API-KEY',
             'SECRET-AZURE-SEARCH-KEY',
@@ -76,16 +109,29 @@ async function getRequiredConfig() {
             'SECRET-JIRA-API-TOKEN'
         ];
 
-        // Retrieve secrets
         const secrets = {};
         for (const secretName of secretNames) {
-            const secret = await secretClient.getSecret(secretName);
-            secrets[secretName] = decryptIfNeeded(secret.value);
-            console.log(`Retrieved secret ${secretName}:`, secret.value ? "present" : "missing");
+            try {
+                const secret = await client.getSecret(secretName);
+                secrets[secretName] = this._decryptIfNeeded(secret.value);
+            } catch (error) {
+                console.error(`Error retrieving secret ${secretName}:`, error.message);
+                throw error;
+            }
         }
 
-        // Map all settings and secrets to our config structure
-        config = {
+        return secrets;
+    }
+
+    /**
+     * Build configuration object from settings and secrets
+     * @param {Object} settings - App Configuration settings
+     * @param {Object} secrets - Key Vault secrets
+     * @returns {Object} Complete configuration object
+     * @private
+     */
+    _buildConfig(settings, secrets) {
+        return {
             search: {
                 endpoint: settings['SEARCH_ENDPOINT'],
                 apiKey: secrets['SECRET-AZURE-SEARCH-KEY'],
@@ -113,42 +159,43 @@ async function getRequiredConfig() {
                 apiToken: secrets['SECRET-JIRA-API-TOKEN']
             }
         };
+    }
 
-        console.log("Final Search config:", {
-            endpoint: config.search.endpoint,
-            indexName: config.search.indexName,
-            apiKey: config.search.apiKey ? "present" : "missing"
-        });
+    /**
+     * Decrypt values if they are encrypted
+     * @param {string} value - Value to decrypt
+     * @returns {string} Decrypted value
+     * @private
+     */
+    _decryptIfNeeded(value) {
+        if (!value) return value;
+        return value.startsWith('crypto_') ? value.substring(7) : value;
+    }
 
-        console.log("Final Graph Auth config:", {
-            tenantId: config.graphAuth.tenantId,
-            clientId: config.graphAuth.clientId,
-            clientSecret: config.graphAuth.clientSecret ? "present" : "missing"
-        });
-
-        console.log("Final Storage config:", {
-            connectionString: config.storage.connectionString ? "present" : "missing"
-        });
-
-        console.log("Final OpenAI config:", {
-            endpoint: config.openai.endpoint,
-            apiKey: config.openai.apiKey ? "present" : "missing",
-            embeddingDeployment: config.openai.embeddingDeployment
-        });
-
-        console.log("Final Jira config:", {
-            baseUrl: config.jira.baseUrl,
-            username: config.jira.username,
-            apiToken: config.jira.apiToken ? "present" : "missing"
-        });
-
-        return config;
-    } catch (error) {
-        console.error("Failed to retrieve configuration:", error);
-        throw error;
+    /**
+     * Get configuration
+     * @returns {Promise<Object>} Configuration object
+     */
+    async getConfig() {
+        if (!this.initialized) {
+            await this.initialize();
+        }
+        return this.config;
     }
 }
 
+// Singleton instance
+const configurationService = new ConfigurationService();
+
+/**
+ * Get required configuration
+ * @returns {Promise<Object>} Configuration object
+ */
+async function getRequiredConfig() {
+    return await configurationService.getConfig();
+}
+
 module.exports = {
-    getRequiredConfig
+    getRequiredConfig,
+    configurationService
 };
