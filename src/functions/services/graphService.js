@@ -4,13 +4,13 @@
 // Purpose: Handles all Microsoft Graph API interactions for SharePoint access.
 //          Provides methods for site, drive, and file operations.
 
+require('isomorphic-fetch'); // Required for MS Graph Client
 const { Client } = require('@microsoft/microsoft-graph-client');
-const { TokenCredentialAuthenticationProvider } = require("@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials");
+const { TokenCredentialAuthenticationProvider } = require('@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials');
 const { ClientSecretCredential } = require('@azure/identity');
 const axios = require('axios');
 const { getRequiredConfig } = require('../utils/configService');
 const { logMessage, logError } = require('../utils/loggingService');
-require('isomorphic-fetch'); // Required for MS Graph Client
 
 /**
  * Initializes a Microsoft Graph client with proper authentication
