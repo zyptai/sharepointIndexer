@@ -3,7 +3,7 @@
 
 const { processSharePointFile } = require('./utils/fileProcessors');
 const { logMessage, logError } = require('./utils/loggingService');
-const { getRequiredConfig } = require('./utils/configService');
+const { getRequiredConfig } = require('./utils/configService');  // ✓ correct
 const { TextDecoder } = require('util');
 
 /**

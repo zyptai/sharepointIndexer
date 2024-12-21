@@ -18,6 +18,7 @@ const { generateEmbedding } = require('../services/openAiService');
 const { createSearchDocument, validateDocument } = require('../models/documentModel');
 const { initializeGraphClient, getSiteInfo, getDriveInfo, getFileMetadata } = require('../services/graphService');
 const { initializeSearchClient } = require('../services/searchService');
+const { getRequiredConfig } = require('./configService');
 
 /**
  * Controls the maximum size of content chunks for processing
