@@ -53,7 +53,6 @@ function chunkContent(context, content, maxChunkSize = MAX_CHUNK_SIZE) {
     }
 
     logMessage(context, "Content chunking complete", {
-        totalChunks: chunks.length,
         averageChunkSize: Math.round(chunks.reduce((acc, chunk) => acc + chunk.length, 0) / chunks.length)
     });
 

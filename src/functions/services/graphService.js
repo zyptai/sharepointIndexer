@@ -2,35 +2,46 @@
 // Proprietary and confidential to ZyptAI  
 // File: services/graphService.js
 // Purpose: Handles all Microsoft Graph API interactions for SharePoint access.
-//          Provides methods for site, drive, and file operations.
 
 require('isomorphic-fetch');
 const { Client } = require('@microsoft/microsoft-graph-client');
+const axios = require('axios');
 const { TokenCredentialAuthenticationProvider } = require('@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials');
 const { ClientSecretCredential } = require('@azure/identity');
-const axios = require('axios');
-const { getRequiredConfig } = require('../utils/configService');
+const configService = require('../utils/configService');
+const keyVaultService = require('./keyVaultService');
 const { logMessage, logError } = require('../utils/loggingService');
 
 /**
  * Initialize Microsoft Graph client with authentication
  * @returns {Promise<Client>} Authenticated Graph client
- * @throws {Error} If initialization fails
  */
 async function initializeGraphClient() {
     try {
         logMessage(null, "Initializing Graph client");
-        const config = await getRequiredConfig();
 
-        if (!config.graphAuth?.tenantId || !config.graphAuth?.clientId || !config.graphAuth?.clientSecret) {
+        // Get configuration settings
+        const tenantId = await configService.getSetting('BOT_TENANT_ID');
+        const clientId = await configService.getSetting('BOT_ID');
+        
+        // Get secret from Key Vault
+        const clientSecret = await keyVaultService.getSecret('SECRET-BOT-PASSWORD');
+
+        logMessage(null, "Retrieved Graph authentication config:", {
+            hasTenantId: !!tenantId,
+            hasClientId: !!clientId,
+            hasSecret: !!clientSecret
+        });
+
+        if (!tenantId || !clientId || !clientSecret) {
             throw new Error("Missing required Graph authentication configuration");
         }
 
         // Create credential using client secret
         const credential = new ClientSecretCredential(
-            config.graphAuth.tenantId,
-            config.graphAuth.clientId,
-            config.graphAuth.clientSecret
+            tenantId,
+            clientId,
+            clientSecret
         );
 
         // Create authentication provider

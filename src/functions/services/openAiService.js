@@ -2,23 +2,15 @@
 // Proprietary and confidential to ZyptAI
 // File: services/openAiService.js
 // Purpose: Manages interactions with Azure OpenAI service for generating embeddings.
-//          Handles rate limiting and error recovery for embedding operations.
 
 const { OpenAIClient, AzureKeyCredential } = require("@azure/openai");
-const { getRequiredConfig } = require('../utils/configService');
+const configService = require('../utils/configService');
+const keyVaultService = require('./keyVaultService');
 const { logMessage, logError } = require('../utils/loggingService');
 
-/**
- * Maximum retries for embedding generation
- * @constant {number}
- */
+// Constants for retry logic
 const MAX_RETRIES = 3;
-
-/**
- * Base delay for exponential backoff (in ms)
- * @constant {number}
- */
-const BASE_DELAY = 1000;
+const BASE_DELAY = 1000; // 1 second base delay for exponential backoff
 
 let openAIClient = null;
 
@@ -28,32 +20,30 @@ let openAIClient = null;
  */
 async function getOpenAIClient() {
     if (!openAIClient) {
-        const config = await getRequiredConfig();
-        
-        console.log("Creating new OpenAI client with config:", {
-            endpoint: config.openai.endpoint,
-            apiKey: config.openai.apiKey,
-            embeddingDeployment: config.openai.embeddingDeployment,
-            apiKeyLength: config.openai.apiKey?.length
-        });
-
-        if (!config.openai.endpoint || !config.openai.apiKey) {
-            throw new Error(`Missing OpenAI configuration - endpoint: ${!!config.openai.endpoint}, apiKey: ${!!config.openai.apiKey}`);
-        }
-
         try {
+            // Get configuration settings
+            const endpoint = await configService.getSetting('AZURE_OPENAI_ENDPOINT');
+            const apiKey = await keyVaultService.getSecret('SECRET-AZURE-OPENAI-API-KEY');
+
+            logMessage(null, "Creating new OpenAI client with config:", {
+                endpoint,
+                hasApiKey: !!apiKey
+            });
+
+            if (!endpoint || !apiKey) {
+                throw new Error("Missing required OpenAI configuration");
+            }
+
             openAIClient = new OpenAIClient(
-                config.openai.endpoint,
-                new AzureKeyCredential(config.openai.apiKey)
+                endpoint,
+                new AzureKeyCredential(apiKey)
             );
             
-            console.log("OpenAI client created successfully");
+            logMessage(null, "OpenAI client created successfully");
         } catch (error) {
-            console.error("Failed to create OpenAI client:", error);
-            throw error;
+            logError(null, error, { operation: 'initializeOpenAIClient' });
+            throw new Error(`Failed to initialize OpenAI client: ${error.message}`);
         }
-    } else {
-        console.log("Returning existing OpenAI client");
     }
     return openAIClient;
 }
@@ -68,28 +58,16 @@ async function getOpenAIClient() {
  */
 async function generateEmbedding(context, text, retry = 0) {
     try {
-        const config = await getRequiredConfig();
-        
-        console.log("Generating embedding with config:", {
-            endpoint: config.openai.endpoint,
-            apiKey: config.openai.apiKey,
-            embeddingDeployment: config.openai.embeddingDeployment,
-            textLength: text.length,
-            attempt: retry + 1
-        });
-
         const client = await getOpenAIClient();
+        const embeddingDeployment = await configService.getSetting('AZURE_OPENAI_EMBEDDING_DEPLOYMENT');
 
         logMessage(context, "Generating embeddings", {
             textLength: text.length,
-            attempt: retry + 1
+            attempt: retry + 1,
+            embeddingDeployment
         });
 
-        console.log("Making API call to OpenAI with deployment:", config.openai.embeddingDeployment);
-        const result = await client.getEmbeddings(
-            config.openai.embeddingDeployment,
-            [text]
-        );
+        const result = await client.getEmbeddings(embeddingDeployment, [text]);
 
         if (!result.data || !result.data[0].embedding) {
             throw new Error("No embedding returned from Azure OpenAI");
@@ -101,7 +79,11 @@ async function generateEmbedding(context, text, retry = 0) {
         
         return result.data[0].embedding;
     } catch (error) {
-        console.error("Error in generateEmbedding:", error);
+        logError(context, error, {
+            operation: 'generateEmbedding',
+            textLength: text?.length,
+            retry: retry
+        });
         
         if (retry < MAX_RETRIES) {
             const delay = BASE_DELAY * Math.pow(2, retry);
@@ -114,11 +96,6 @@ async function generateEmbedding(context, text, retry = 0) {
             return generateEmbedding(context, text, retry + 1);
         }
 
-        logError(context, error, {
-            operation: 'generateEmbedding',
-            textLength: text.length,
-            finalAttempt: retry + 1
-        });
         throw error;
     }
 }
@@ -137,7 +114,7 @@ async function generateEmbeddingBatch(context, texts) {
     const embeddings = [];
     for (let i = 0; i < texts.length; i++) {
         try {
-            console.log(`Processing batch item ${i + 1}/${texts.length}`);
+            logMessage(context, `Processing batch item ${i + 1}/${texts.length}`);
             const embedding = await generateEmbedding(context, texts[i]);
             embeddings.push(embedding);
         } catch (error) {

@@ -2,30 +2,45 @@
 // Proprietary and confidential to ZyptAI
 // File: services/searchService.js
 // Purpose: Manages Azure Cognitive Search operations for document indexing.
-//          Handles document upload, deletion, and search operations.
 
 const { SearchClient, AzureKeyCredential } = require("@azure/search-documents");
-const { getRequiredConfig } = require('../utils/configService');
+const configService = require('../utils/configService');
+const keyVaultService = require('./keyVaultService');
 const { logMessage, logError } = require('../utils/loggingService');
 const { validateDocument } = require('../models/documentModel');
 
 /**
  * Initializes an Azure Cognitive Search client
  * @returns {Promise<SearchClient>} Initialized search client
- * @throws {Error} If search configuration is invalid
  */
 async function initializeSearchClient() {
-    const config = await getRequiredConfig();
-    
-    if (!config.search.endpoint || !config.search.apiKey || !config.search.indexName) {
-        throw new Error("Missing required search configuration");
+    try {
+        // Get configuration settings
+        const endpoint = await configService.getSetting('AZURE_SEARCH_ENDPOINT');
+        const indexName = await configService.getSetting('SEARCH_INDEX_NAME');
+        
+        // Get secret from Key Vault
+        const apiKey = await keyVaultService.getSecret('SECRET-AZURE-SEARCH-KEY');
+
+        logMessage(null, "Initializing Search client with config:", {
+            endpoint,
+            indexName,
+            hasApiKey: !!apiKey
+        });
+        
+        if (!endpoint || !apiKey || !indexName) {
+            throw new Error("Missing required search configuration");
+        }
+        
+        return new SearchClient(
+            endpoint,
+            indexName,
+            new AzureKeyCredential(apiKey)
+        );
+    } catch (error) {
+        logError(null, error, { operation: 'initializeSearchClient' });
+        throw new Error(`Search client initialization failed: ${error.message}`);
     }
-    
-    return new SearchClient(
-        config.search.endpoint,
-        config.search.indexName,
-        new AzureKeyCredential(config.search.apiKey)
-    );
 }
 
 /**

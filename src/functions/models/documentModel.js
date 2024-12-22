@@ -14,7 +14,7 @@ const path = require('path');
  * @param {Object} params.fileInfo File metadata from SharePoint
  * @param {string} params.content Chunk text content
  * @param {Array<number>} params.embedding Vector embedding of content
- * @param {number} params.totalChunks Total number of chunks for this file
+ * @param {number} params.totalChunks Total number of chunks
  * @returns {Object} Formatted search document
  */
 function createSearchDocument({
@@ -29,6 +29,9 @@ function createSearchDocument({
         throw new Error('Missing required parameters for document creation');
     }
 
+    // Convert lastmodified to proper ISO string if it isn't already
+    const lastModified = new Date(fileInfo.lastModifiedDateTime).toISOString();
+
     return {
         // Unique identifier for this chunk
         docId: `${fileId}-${chunkIndex}`,
@@ -38,21 +41,15 @@ function createSearchDocument({
         filename: fileInfo.name,
         filetype: path.extname(fileInfo.name).toLowerCase(),
         fileUrl: fileInfo.webUrl,
-        lastmodified: fileInfo.lastModifiedDateTime,
+        lastmodified: lastModified,
         
         // Chunk information
         description: content,
-        chunkindex: chunkIndex.toString(),
-        totalChunks: totalChunks.toString(),
+        chunkindex: parseInt(chunkIndex), // Convert to integer for Edm.Int32
+        totalChuncks: parseInt(totalChunks), // Match schema spelling and type
         
         // Vector embedding
-        descriptionVector: embedding,
-        
-        // Additional metadata
-        created: fileInfo.createdDateTime,
-        createdBy: fileInfo.createdBy?.user?.email || 'unknown',
-        lastModifiedBy: fileInfo.lastModifiedBy?.user?.email || 'unknown',
-        contentType: fileInfo.file?.mimeType || 'unknown'
+        descriptionVector: embedding
     };
 }
 
@@ -71,7 +68,7 @@ function validateDocument(document) {
         'filetype',
         'lastmodified',
         'chunkindex',
-        'totalChunks',
+        'totalChuncks',
         'descriptionVector',
         'fileUrl'
     ];
@@ -82,8 +79,21 @@ function validateDocument(document) {
         throw new Error(`Invalid document: missing required fields: ${missingFields.join(', ')}`);
     }
 
+    // Type validations
     if (!Array.isArray(document.descriptionVector)) {
         throw new Error('Invalid document: descriptionVector must be an array');
+    }
+
+    if (typeof document.chunkindex !== 'number') {
+        throw new Error('Invalid document: chunkindex must be a number');
+    }
+
+    if (typeof document.totalChuncks !== 'number') {
+        throw new Error('Invalid document: totalChuncks must be a number');
+    }
+
+    if (isNaN(new Date(document.lastmodified).getTime())) {
+        throw new Error('Invalid document: lastmodified must be a valid date');
     }
 
     return true;
