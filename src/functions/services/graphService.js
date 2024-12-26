@@ -20,12 +20,9 @@ async function initializeGraphClient() {
     try {
         logMessage(null, "Initializing Graph client");
 
-        // Get configuration settings
-        const tenantId = await configService.getSetting('BOT_TENANT_ID');
-        const clientId = await configService.getSetting('BOT_ID');
-        
-        // Get secret from Key Vault
-        const clientSecret = await keyVaultService.getSecret('SECRET-BOT-PASSWORD');
+        const tenantId = await configService.getSetting('SHAREPOINT_BOT_TENANT_ID');
+        const clientId = await configService.getSetting('SHAREPOINT_BOT_ID');
+        const clientSecret = await keyVaultService.getSecret('SECRET-SHAREPOINT-BOT-PASSWORD');
 
         logMessage(null, "Retrieved Graph authentication config:", {
             hasTenantId: !!tenantId,
